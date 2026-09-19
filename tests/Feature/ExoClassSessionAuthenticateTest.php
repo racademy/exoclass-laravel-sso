@@ -201,6 +201,21 @@ it('stashes the candidates and redirects to the picker when several apply', func
         ->and(Auth::check())->toBeFalse();
 });
 
+it('renders the picker even when the configured URL disagrees about scheme or host', function () {
+    // A proxy the app does not trust, a forced https URL generator, an APP_URL
+    // whose host differs from the Host header: the picker's absolute URL and
+    // the request's stop matching, and an absolute-URL loop guard never fires.
+    // The browser then follows the redirect back to the same page, forever.
+    config()->set('exoclass-sso.choice_route', 'https://localhost/choose');
+    upstreamAnswers();
+    ssoResolver()->answerWith(fn () => new ChoiceRequired(
+        new Candidate('1042', 'Robotikos akademija'),
+        new Candidate('2087', 'Atletikos akademija'),
+    ));
+
+    withCookie()->get('/choose')->assertOk()->assertSee('pick one of 2');
+});
+
 it('renders the picker instead of redirecting to it forever', function () {
     upstreamAnswers();
     ssoResolver()->answerWith(fn () => new ChoiceRequired(

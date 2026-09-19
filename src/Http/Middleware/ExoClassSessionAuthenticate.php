@@ -493,8 +493,19 @@ final class ExoClassSessionAuthenticate
         return Route::has($value) ? route($value) : null;
     }
 
+    /**
+     * Is this request already the picker?
+     *
+     * Compared by PATH, never by absolute URL. An app behind a proxy it does
+     * not trust, one that forces an https URL generator, or one whose APP_URL
+     * host differs from the Host header produces two URLs that disagree on
+     * scheme, host or port while naming the same page — and a loop guard that
+     * never fires is a redirect loop, with an upstream call on every lap.
+     */
     private function isAt(Request $request, string $url): bool
     {
-        return rtrim($request->url(), '/') === rtrim(strtok($url, '?') ?: $url, '/');
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return trim($request->path(), '/') === trim(is_string($path) ? $path : '/', '/');
     }
 }

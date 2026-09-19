@@ -8,8 +8,10 @@ use ExoClass\Sso\Contracts\IdentityFetcher;
 use ExoClass\Sso\Http\ExoClassSessionClient;
 use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
 use ExoClass\Sso\Identity\UsersCurrentIdentityFetcher;
+use ExoClass\Sso\Support\CookieExemptions;
 use ExoClass\Sso\Support\SsoLogger;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 
@@ -42,6 +44,15 @@ final class ExoClassSsoServiceProvider extends ServiceProvider
         // reads `->middleware(['exoclass-sso'])`. The class name works too.
         $router = $this->app->make(Router::class);
         $router->aliasMiddleware('exoclass-sso', ExoClassSessionAuthenticate::class);
+
+        // The integration step that used to fail silently, taken away from the
+        // integrator. `EncryptCookies` replaces any cookie it cannot decrypt
+        // with null, and the ExoClass cookies were signed with ExoClass's key —
+        // so without this the credential simply is not there, on every request,
+        // with nothing in any log to say why. Config is loaded by the time a
+        // provider boots, which is exactly why this belongs here and not in the
+        // host app's `withMiddleware()` closure, where config does not exist yet.
+        EncryptCookies::except(CookieExemptions::names($this->app->make(Repository::class)));
 
         if ($this->app->runningInConsole()) {
             $this->publishes([

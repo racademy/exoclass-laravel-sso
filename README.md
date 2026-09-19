@@ -32,8 +32,9 @@ migrations and no Filament, Livewire or Eloquent dependency.
 
 ## Integrating a new subsystem
 
-Ten steps. Steps 4 and 5 are the two that fail silently if you skip them, and
-step 10 is the one that keeps a broken integration off production.
+Ten steps. Step 5 is the one that fails silently if you get it wrong, step 4 is
+the one that used to and no longer can, and step 10 is the one that keeps a
+broken integration off production.
 
 ### 1. Install
 
@@ -73,25 +74,32 @@ makes a copied `.env` work in production and quietly do nothing on staging.
 | `EXOCLASS_SSO_COOKIE_DOMAIN` | `.exoclass.com` | `.exoclass.com` | your shared local domain |
 | `EXOCLASS_SSO_CHOICE_ROUTE` | your picker route name | same | same |
 
-### 4. Exempt the cookies from encryption
+### 4. Exempt the cookies from encryption — already done for you
 
-**Without this nothing works and nothing says why.** `EncryptCookies` tries to
-decrypt every cookie; the ExoClass ones were signed with ExoClass's key, so
-decryption fails, and Laravel's answer to a cookie it cannot decrypt is to
-replace it with `null`. No exception, no log line — `$request->cookie(...)`
-simply returns null forever.
+`EncryptCookies` tries to decrypt every cookie; the ExoClass ones were signed
+with ExoClass's key, so decryption fails, and Laravel's answer to a cookie it
+cannot decrypt is to replace it with `null`. No exception, no log line —
+`$request->cookie(...)` simply returns null forever, and the integration looks
+perfectly healthy while doing nothing.
+
+That is too quiet a failure to leave to a checklist, so the package registers
+the exemption itself, from its service provider, using the cookie names your
+config actually has:
 
 ```php
-// bootstrap/app.php
-use ExoClass\Sso\Support\CookieExemptions;
-
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->encryptCookies(except: CookieExemptions::names());
-})
+// ExoClassSsoServiceProvider::boot()
+EncryptCookies::except(CookieExemptions::names($config));
 ```
 
-Do not add the package's own `exoclass_sso_suppressed` cookie to that list:
-Laravel signs and reads it, and exempting it would let a visitor forge one.
+**There is nothing to add to `bootstrap/app.php`.** If your app keeps one
+explicit list of exempt cookies anyway, `CookieExemptions::names()` returns the
+two names and is safe to call from inside `withMiddleware()` — that closure runs
+before the framework loads configuration, so the helper falls back to the
+environment there rather than fataling the app (an earlier version of it read
+config unconditionally and took the whole app down at boot).
+
+Do not add the package's own `exoclass_sso_suppressed` cookie to any exemption
+list: Laravel signs and reads it, and exempting it would let a visitor forge one.
 
 ### 5. Register the middleware, in the right place
 
@@ -232,8 +240,8 @@ it('ends the ExoClass session when a SSO user logs out', function () {
 ```
 
 Add a fourth if you can: one test **without** `withExoClassCookie` that sets the
-cookie by hand, proving your own `encryptCookies(except:)` is wired up. The
-helper applies the exemption for you, which is convenient and hides step 4.
+cookie by hand, proving the exemption is live in your app's real middleware
+stack. The helper applies it for you, which is convenient and hides step 4.
 
 ### 10. Probe live before flipping the flag
 

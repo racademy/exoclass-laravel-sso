@@ -193,9 +193,12 @@ it('names the cookies the host app must keep Laravel from mangling', function ()
 });
 
 it('proves the exemption is not optional: without it there is no credential', function () {
-    // No EncryptCookies::except() here. Laravel finds a cookie it did not sign,
-    // fails to decrypt it, and hands the request a null — SSO silently never
-    // fires, with nothing in any log to explain why.
+    // What an app looks like with the exemption gone — which is why the package
+    // registers it at boot instead of asking an integrator to. Laravel finds a
+    // cookie it did not sign, fails to decrypt it, and hands the request a
+    // null: SSO silently never fires, with nothing in any log to explain why.
+    EncryptCookies::flushState();
+
     Http::fake();
     ssoResolver()->answerWith(fn () => new Authenticated(ssoUser(7)));
 

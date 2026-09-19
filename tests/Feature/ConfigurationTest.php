@@ -9,7 +9,11 @@ use ExoClass\Sso\Http\ExoClassSessionClient;
 use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
 use ExoClass\Sso\Http\RequestClassifier;
 use ExoClass\Sso\Identity\UsersCurrentIdentityFetcher;
+use ExoClass\Sso\Resolution\Authenticated;
+use ExoClass\Sso\Support\CookieExemptions;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Re-evaluate the shipped config file with a given environment, the way a host
@@ -155,4 +159,33 @@ it('binds the transport and the default fetcher, but never the app-owned resolve
         ->and(app(ExoClassSessionClient::class))->toBe(app(ExoClassSessionClient::class))
         ->and(app(IdentityFetcher::class))->toBeInstanceOf(UsersCurrentIdentityFetcher::class)
         ->and(app()->bound(IdentityResolver::class))->toBeFalse();
+});
+
+it('exempts the ExoClass cookies from encryption without the host app remembering to', function () {
+    // Nothing called EncryptCookies::except() here. The package did it at boot,
+    // because this is the step that fails silently when an integrator skips it.
+    Http::fake(['*users/current' => Http::response(identityPayload())]);
+    ssoResolver()->answerWith(fn () => new Authenticated(ssoUser(7)));
+
+    harness()
+        ->withUnencryptedCookies(['sta_exoclass_session' => 'RAW-EXOCLASS-COOKIE-VALUE-7f3a'])
+        ->get('/dashboard')
+        ->assertOk()
+        ->assertSee('dashboard for 7');
+});
+
+it('names the cookies before the app has a config repository at all', function () {
+    // `bootstrap/app.php`'s withMiddleware() closure runs inside an
+    // afterResolving(Kernel::class) callback — BEFORE LoadConfiguration and
+    // RegisterFacades. A README step that reads config there takes the whole
+    // app down with "Target class [config] does not exist".
+    $application = Facade::getFacadeApplication();
+    Facade::clearResolvedInstances();
+    Facade::setFacadeApplication(null);
+
+    try {
+        expect(CookieExemptions::names())->toBe(['exoclass_session', 'EXO-XSRF-TOKEN']);
+    } finally {
+        Facade::setFacadeApplication($application);
+    }
 });

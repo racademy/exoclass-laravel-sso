@@ -23,10 +23,14 @@ abstract class TestCase extends Orchestra
 {
     protected function setUp(): void
     {
+        // Before the app boots, not after: the package registers its own cookie
+        // exemption from the provider's boot, and flushing afterwards would
+        // throw that away and hide it from every test in this suite.
+        EncryptCookies::flushState();
+
         parent::setUp();
 
         ArrayUserProvider::reset();
-        EncryptCookies::flushState();
         ExoClassSessionAuthenticate::denyUsing(null);
 
         Auth::provider('array', static fn (): ArrayUserProvider => new ArrayUserProvider);

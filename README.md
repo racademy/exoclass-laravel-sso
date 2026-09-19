@@ -49,15 +49,12 @@ The repository is private, so Composer needs the VCS entry:
 ```
 
 ```bash
-composer require racademy/exoclass-laravel-sso:^0.1
+composer require racademy/exoclass-laravel-sso:^0.1.1
 ```
 
-Until `v0.1.0` is tagged there is no version to resolve, so the first consumers
-track the branch:
-
-```bash
-composer require racademy/exoclass-laravel-sso:dev-main
-```
+Take `^0.1.1`, not `^0.1.0`. The `v0.1.0` tag was cut before CI had run and
+sits on a commit whose PHP 8.4 / Laravel 13 leg fails; `v0.1.1` is the same
+release with that fixed, and is the first tag any consumer should resolve.
 
 ### 2. Publish the config
 

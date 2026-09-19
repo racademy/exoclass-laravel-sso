@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace ExoClass\Sso\Tests;
 
+use ExoClass\Sso\Actions\CompleteChoice;
 use ExoClass\Sso\Actions\GlobalLogout;
 use ExoClass\Sso\ExoClassSsoServiceProvider;
 use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
+use ExoClass\Sso\Resolution\Authenticated;
+use ExoClass\Sso\Resolution\Denied;
 use ExoClass\Sso\Session\SsoSession;
 use ExoClass\Sso\Tests\Support\ArrayUserProvider;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -75,6 +78,17 @@ abstract class TestCase extends Orchestra
             $router->get('/up', static fn (): string => 'healthy');
             $router->get('/livewire/update', static fn (): string => 'livewire');
             $router->post('/dashboard', static fn (): string => 'saved');
+            $router->post('/choose', static function (Request $request): string {
+                $resolution = app(CompleteChoice::class)
+                    ->handle($request, (string) $request->input('key'));
+
+                if ($resolution instanceof Authenticated) {
+                    return 'entered as '.(string) Auth::id()
+                        .' heading for '.(SsoSession::pullIntendedUrl(app('session.store')) ?? 'nowhere');
+                }
+
+                return 'refused: '.($resolution instanceof Denied ? $resolution->reason : $resolution::class);
+            });
             $router->get('/logout', static function (Request $request): string {
                 app(GlobalLogout::class)->handle($request);
                 Auth::logout();

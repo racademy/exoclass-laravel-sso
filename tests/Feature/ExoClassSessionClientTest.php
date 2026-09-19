@@ -114,6 +114,20 @@ it('throws Malformed when a 200 carries no JSON object', function () {
         ->toThrow(MalformedResponseException::class);
 });
 
+it('never re-asks a question ExoClass has already answered', function (int $status, string $exception) {
+    // The budget is deliberately wide here: with the default of one attempt
+    // nothing can retry, so this row proves the retry PREDICATE, not the cap.
+    config()->set('exoclass-sso.probe_retry_times', 2);
+    Http::fake(['*' => Http::response(['message' => 'no'], $status)]);
+
+    expect(fn () => client()->currentUser(credential()))->toThrow($exception);
+
+    Http::assertSentCount(1);
+})->with([
+    'a 401 is the ordinary answer for a signed-out visitor, not a glitch' => [401, UnauthorizedException::class],
+    'a 403 will not become a 200 on the second ask either' => [403, UnavailableException::class],
+]);
+
 it('spends the configured probe budget on transient failures only', function () {
     config()->set('exoclass-sso.probe_retry_times', 2);
     Http::fake(['*' => Http::response('nope', 500)]);

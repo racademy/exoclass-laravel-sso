@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Laravel 12 and 13 are both supported, so the constraint set has to
+        # keep resolving for both: Testbench 10 pulls Laravel 12, Testbench 11
+        # pulls Laravel 13. Pest 5 needs PHP 8.4, so the 8.3 legs resolve to
+        # Pest 4 — exactly what a host app still on 8.3 will get.
+        include:
+          - php: '8.3'
+            laravel: '12'
+            testbench: '^10.0'
+          - php: '8.3'
+            laravel: '13'
+            testbench: '^11.0'
+          - php: '8.4'
+            laravel: '12'
+            testbench: '^10.0'
+          - php: '8.4'
+            laravel: '13'
+            testbench: '^11.0'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ matrix.php }}-${{ matrix.laravel }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-${{ matrix.laravel }}-
+
+      - name: Pin the Laravel major under test
+        run: composer require --dev "orchestra/testbench:${{ matrix.testbench }}" --no-update --no-interaction
+
+      - name: Install dependencies
+        run: composer update --prefer-stable --no-interaction --no-progress
+
+      - name: Show what resolved
+        run: composer show laravel/framework orchestra/testbench pestphp/pest | head -40
+
+      - name: Tests
+        run: vendor/bin/pest --ci
+
+  static:
+    name: Pint and PHPStan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer update --prefer-stable --no-interaction --no-progress
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G

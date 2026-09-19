@@ -1,0 +1,66 @@
+{
+    "name": "racademy/exoclass-laravel-sso",
+    "description": "Shared ExoClass session SSO for Laravel subsystems: validates the .exoclass.com session cookie upstream and hands the app a resolved identity.",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": [
+        "exoclass",
+        "laravel",
+        "sso",
+        "sanctum"
+    ],
+    "authors": [
+        {
+            "name": "Robotikos akademija",
+            "email": "info@robotikosakademija.lt"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/auth": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/cookie": "^12.0 || ^13.0",
+        "illuminate/http": "^12.0 || ^13.0",
+        "illuminate/session": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.12",
+        "laravel/pint": "^1.32",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0 || ^5.0",
+        "pestphp/pest-plugin-laravel": "^4.0 || ^5.0",
+        "phpstan/phpstan": "^2.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "ExoClass\\Sso\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ExoClass\\Sso\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "lint": "vendor/bin/pint --test",
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=1G"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ExoClass\\Sso\\ExoClassSsoServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

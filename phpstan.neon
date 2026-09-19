@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    paths:
+        - src
+        - tests
+    tmpDir: build/phpstan
+    excludePaths:
+        analyseAndScan:
+            # Pest's arch() expectations are a fluent DSL PHPStan cannot model:
+            # arch() is typed as returning a TestCall, so every ->expect() on it
+            # reads as a call to an undefined method. The file is pure
+            # assertions with no logic to analyse.
+            - tests/Unit/ArchTest.php

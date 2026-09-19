@@ -61,8 +61,12 @@ jobs:
       - name: Install dependencies
         run: composer update --prefer-stable --no-interaction --no-progress
 
+      # `composer show a b c` is rejected by Composer 2.x ("Too many arguments"),
+      # and the old `| head` swallowed the failure, so this step printed nothing
+      # useful for four green runs. One listing, filtered, and the pipeline's
+      # last command is the grep — so a missing package fails the step.
       - name: Show what resolved
-        run: composer show laravel/framework orchestra/testbench pestphp/pest | head -40
+        run: composer show | grep -E "^(laravel/framework|orchestra/testbench|pestphp/pest) "
 
       - name: Tests
         run: vendor/bin/pest --ci

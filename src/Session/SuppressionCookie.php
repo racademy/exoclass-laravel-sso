@@ -6,6 +6,7 @@ namespace ExoClass\Sso\Session;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cookie;
 use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
@@ -21,23 +22,34 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
  * It is a COOKIE and not a session key on purpose: logout invalidates the
  * session, which would take a session-stored marker with it.
  *
- * It belongs to THIS app, on THIS host (no domain, so it is host-only), and its
- * presence alone is the signal — the browser drops it at expiry, so there is no
- * timestamp to compare and nothing to keep in sync.
+ * It belongs to THIS app, on THIS host, and its presence alone is the signal —
+ * the browser drops it at expiry, so there is no timestamp to compare and
+ * nothing to keep in sync.
+ *
+ * Host-only is load-bearing, and it is NOT what `Cookie::make(domain: null)`
+ * gives you: the jar resolves `$domain ?: $this->domain` and falls back to
+ * `config('session.domain')`. A subsystem of `.exoclass.com` that shares its own
+ * cookies across the parent domain would therefore write this marker there —
+ * same name, same domain, every sibling app overwriting the others' logout,
+ * each one unable to decrypt what the last wrote. So the cookie is built
+ * directly, with a domain that really is null.
  */
 final class SuppressionCookie
 {
     public const NAME = 'exoclass_sso_suppressed';
 
-    public static function make(int $minutes): SymfonyCookie
+    public static function make(int $minutes, bool $secure = false): SymfonyCookie
     {
-        return Cookie::make(
+        return new SymfonyCookie(
             name: self::NAME,
             value: '1',
-            minutes: max(1, $minutes),
+            expire: Carbon::now()->addMinutes(max(1, $minutes))->getTimestamp(),
             path: '/',
             domain: null,
+            secure: $secure,
             httpOnly: true,
+            raw: false,
+            sameSite: SymfonyCookie::SAMESITE_LAX,
         );
     }
 
@@ -47,7 +59,10 @@ final class SuppressionCookie
      */
     public static function queue(Repository $config): void
     {
-        Cookie::queue(self::make((int) $config->get('exoclass-sso.suppress_minutes', 5)));
+        Cookie::queue(self::make(
+            (int) $config->get('exoclass-sso.suppress_minutes', 5),
+            (bool) $config->get('session.secure', false),
+        ));
     }
 
     public static function presentOn(Request $request): bool

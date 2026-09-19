@@ -170,6 +170,14 @@ it('carries no XSRF token when the app forgot to exempt that cookie too', functi
 });
 
 it('makes a host-only suppression cookie that outlives the session it replaces', function () {
+    // The app under test shares its OWN cookies across the parent domain, which
+    // is the natural setting for a subsystem of `.exoclass.com`. Laravel's
+    // cookie jar resolves a null domain to that default, so a marker made
+    // through it would land on `.exoclass.com` — one name, one parent domain,
+    // every sibling subsystem overwriting the others' logout marker.
+    config()->set('session.domain', '.exoclass.com');
+    app('cookie')->setDefaultPathAndDomain('/', '.exoclass.com', false, 'lax');
+
     $cookie = SuppressionCookie::make(5);
 
     expect($cookie->getName())->toBe(SuppressionCookie::NAME)

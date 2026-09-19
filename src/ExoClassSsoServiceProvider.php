@@ -6,9 +6,11 @@ namespace ExoClass\Sso;
 
 use ExoClass\Sso\Contracts\IdentityFetcher;
 use ExoClass\Sso\Http\ExoClassSessionClient;
+use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
 use ExoClass\Sso\Identity\UsersCurrentIdentityFetcher;
 use ExoClass\Sso\Support\SsoLogger;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -36,6 +38,11 @@ final class ExoClassSsoServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // A short name for the wiring, so a Filament panel or a route group
+        // reads `->middleware(['exoclass-sso'])`. The class name works too.
+        $router = $this->app->make(Router::class);
+        $router->aliasMiddleware('exoclass-sso', ExoClassSessionAuthenticate::class);
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 self::configPath() => $this->app->configPath('exoclass-sso.php'),

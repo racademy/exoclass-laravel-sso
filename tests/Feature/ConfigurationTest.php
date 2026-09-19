@@ -6,8 +6,10 @@ use ExoClass\Sso\Contracts\IdentityFetcher;
 use ExoClass\Sso\Contracts\IdentityResolver;
 use ExoClass\Sso\ExoClassSsoServiceProvider;
 use ExoClass\Sso\Http\ExoClassSessionClient;
+use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
 use ExoClass\Sso\Http\RequestClassifier;
 use ExoClass\Sso\Identity\UsersCurrentIdentityFetcher;
+use Illuminate\Routing\Router;
 
 /**
  * Re-evaluate the shipped config file with a given environment, the way a host
@@ -139,6 +141,13 @@ it('merges the config into the host app and offers it for publishing', function 
     expect($published)->toHaveCount(1)
         ->and(array_key_first($published))->toEndWith('config/exoclass-sso.php')
         ->and(reset($published))->toEndWith('config/exoclass-sso.php');
+});
+
+it('registers a middleware alias, so wiring a panel reads like wiring a panel', function () {
+    $router = app(Router::class);
+
+    expect($router->getMiddleware())->toHaveKey('exoclass-sso')
+        ->and($router->getMiddleware()['exoclass-sso'])->toBe(ExoClassSessionAuthenticate::class);
 });
 
 it('binds the transport and the default fetcher, but never the app-owned resolver', function () {

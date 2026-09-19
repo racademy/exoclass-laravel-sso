@@ -27,6 +27,7 @@ abstract class TestCase extends Orchestra
 
         ArrayUserProvider::reset();
         EncryptCookies::flushState();
+        ExoClassSessionAuthenticate::denyUsing(null);
 
         Auth::provider('array', static fn (): ArrayUserProvider => new ArrayUserProvider);
     }

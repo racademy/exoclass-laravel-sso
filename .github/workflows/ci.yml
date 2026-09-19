@@ -24,16 +24,16 @@ jobs:
         # Pest 4 — exactly what a host app still on 8.3 will get.
         include:
           - php: '8.3'
-            laravel: '12'
+            laravel: '^12.0'
             testbench: '^10.0'
           - php: '8.3'
-            laravel: '13'
+            laravel: '^13.0'
             testbench: '^11.0'
           - php: '8.4'
-            laravel: '12'
+            laravel: '^12.0'
             testbench: '^10.0'
           - php: '8.4'
-            laravel: '13'
+            laravel: '^13.0'
             testbench: '^11.0'
 
     steps:
@@ -54,7 +54,9 @@ jobs:
           restore-keys: composer-${{ matrix.php }}-${{ matrix.laravel }}-
 
       - name: Pin the Laravel major under test
-        run: composer require --dev "orchestra/testbench:${{ matrix.testbench }}" --no-update --no-interaction
+        run: |
+          composer require --dev "laravel/framework:${{ matrix.laravel }}" --no-update --no-interaction
+          composer require --dev "orchestra/testbench:${{ matrix.testbench }}" --no-update --no-interaction
 
       - name: Install dependencies
         run: composer update --prefer-stable --no-interaction --no-progress

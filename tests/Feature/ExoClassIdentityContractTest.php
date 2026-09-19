@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ExoClass\Sso\Exceptions\MalformedResponseException;
 use ExoClass\Sso\Identity\Employer;
 use ExoClass\Sso\Identity\ExoClassIdentity;
+use ExoClass\Sso\Identity\ProviderInfo;
 
 /**
  * These are CONTRACT tests: they pin the shape of ExoClass's answers against
@@ -51,6 +52,52 @@ it('parses the scoped users/current answer down to the one provider', function (
         ->and($identity->employers)->toHaveCount(1)
         ->and($identity->employers[0]->externalKey)->toBe('c0ffee00-1111-2222-3333-444455556666');
 });
+
+it('reads the provider block ExoClass says it scoped the answer to', function () {
+    $identity = ExoClassIdentity::fromArray(ssoFixture('users-current-scoped'));
+
+    expect($identity->providerInfo)->toBeInstanceOf(ProviderInfo::class)
+        ->and($identity->providerInfo?->id)->toBe(1042)
+        ->and($identity->providerInfo?->externalKey)->toBe('c0ffee00-1111-2222-3333-444455556666')
+        ->and($identity->providerInfo?->name)->toBe('Robotikos akademija')
+        ->and($identity->providerInfo?->matches('c0ffee00-1111-2222-3333-444455556666'))->toBeTrue()
+        ->and($identity->providerInfo?->matches('decafbad-7777-8888-9999-aaaabbbbcccc'))->toBeFalse();
+});
+
+it('reports NO scoped provider when ExoClass answered unscoped', function () {
+    // Upstream still emits the key, filled with nulls from a ProviderDto it
+    // never resolved. That is not a provider, and must not read as one.
+    $identity = ExoClassIdentity::fromArray(ssoFixture('users-current-unscoped'));
+
+    expect($identity->providerInfo)->toBeNull();
+});
+
+it('accepts the `provider` spelling as well as `provider_info`', function (string $key, bool $besideTheUser) {
+    $user = ssoFixture('users-current-scoped');
+    unset($user['provider_info']);
+
+    $block = ['id' => 1042, 'external_key' => 'c0ffee00-1111-2222-3333-444455556666', 'name' => 'Robotikos akademija'];
+
+    $payload = $besideTheUser
+        ? ['user' => $user, $key => $block]
+        : $user + [$key => $block];
+
+    expect(ExoClassIdentity::fromArray($payload)->providerInfo?->externalKey)
+        ->toBe('c0ffee00-1111-2222-3333-444455556666');
+})->with([
+    'provider_info, inside the user object' => ['provider_info', false],
+    'provider, inside the user object' => ['provider', false],
+    'provider_info, beside the user object' => ['provider_info', true],
+    'provider, beside the user object' => ['provider', true],
+]);
+
+it('refuses a blank provider key instead of asking a question that cannot be scoped', function (string $key) {
+    ExoClassIdentity::fromArray(ssoFixture('users-current-unscoped'), fn (string $k): array => ['provider'])
+        ->rolesFor($key);
+})->with([
+    'empty' => [''],
+    'whitespace' => ['   '],
+])->throws(InvalidArgumentException::class);
 
 it('accepts the data envelope as well as a bare payload', function () {
     $bare = ssoFixture('users-current-unscoped');

@@ -1,6 +1,6 @@
 {
     "_source": "synthetic",
-    "_note": "Hand-built from ~/Sites/exoclass app/DataMaps/Api/V1/UserApiMap.php, ProviderApiMap.php and RoleApiMap.php (UserController::currentUser, no X-Provider-Key header). Task 008 replaces this with a response recorded from ExoClass staging with a real session cookie. Shape rules it pins: the payload is BARE (no data envelope), roles[] is flat and carries NO provider attribution, employers[] lists every provider, and provider_info is absent because no provider was requested.",
+    "_note": "Hand-built from ~/Sites/exoclass app/DataMaps/Api/V1/UserApiMap.php, ProviderApiMap.php and RoleApiMap.php (UserController::currentUser, no X-Provider-Key header). Task 008 replaces this with a response recorded from ExoClass staging with a real session cookie. Shape rules it pins: the payload is BARE (no data envelope), roles[] is flat and carries NO provider attribution, employers[] lists every provider, and provider_info is PRESENT BUT ALL-NULL. That last one is the security-critical row: UserController::currentUser sets $response['provider_info'] unconditionally from a ProviderDto that stayed unresolved, so an unscoped answer is a 200 that looks like a scoped one except for this block. An X-Provider-Key ExoClass cannot resolve produces exactly this body, which is why the package refuses it instead of reading roles[] as provider-scoped.",
     "_endpoint": "GET /api/v1/lt/users/current",
     "id": 48211,
     "type": "employee",
@@ -84,5 +84,29 @@
             "legal_entity_phone": "+37061111111",
             "legal_entity_email": "info@brainclub.lt"
         }
-    ]
+    ],
+    "provider_info": {
+        "id": null,
+        "external_key": null,
+        "phone": null,
+        "website": null,
+        "address": null,
+        "timezone_id": null,
+        "is_am_pm": null,
+        "currency_code": null,
+        "marketplace_id": null,
+        "email": null,
+        "type": null,
+        "name": null,
+        "short_name": null,
+        "tutorial_completed": null,
+        "social_links": null,
+        "language": null,
+        "legal_entity_name": null,
+        "legal_entity_personal_code": null,
+        "legal_entity_address": null,
+        "legal_entity_postal_code": null,
+        "legal_entity_phone": null,
+        "legal_entity_email": null
+    }
 }

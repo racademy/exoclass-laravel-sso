@@ -6,6 +6,7 @@ namespace ExoClass\Sso\Identity;
 
 use Closure;
 use ExoClass\Sso\Exceptions\MalformedResponseException;
+use InvalidArgumentException;
 use LogicException;
 
 /**
@@ -45,12 +46,15 @@ final class ExoClassIdentity
      * @param  list<string>  $roles  role names carried by THIS payload: provider-scoped
      *                               when the payload came from a scoped call, otherwise
      *                               the union across every provider (not attributable).
+     * @param  ProviderInfo|null  $providerInfo  the provider ExoClass says it scoped this
+     *                                           payload to, or null when it scoped it to nobody
      * @param  (Closure(string): list<string>)|null  $rolesLoader  performs the scoped call
      */
     public function __construct(
         public readonly ExoClassUser $user,
         public readonly array $employers = [],
         public readonly array $roles = [],
+        public readonly ?ProviderInfo $providerInfo = null,
         private readonly ?Closure $rolesLoader = null,
     ) {}
 
@@ -87,6 +91,9 @@ final class ExoClassIdentity
             ),
             employers: self::parseEmployers($user['employers'] ?? $body['employers'] ?? null),
             roles: self::parseRoleNames($user['roles'] ?? $body['roles'] ?? null),
+            providerInfo: self::parseProviderInfo(
+                $user['provider_info'] ?? $user['provider'] ?? $body['provider_info'] ?? $body['provider'] ?? null
+            ),
             rolesLoader: $rolesLoader,
         );
     }
@@ -100,6 +107,14 @@ final class ExoClassIdentity
      */
     public function rolesFor(string $providerKey): array
     {
+        if (trim($providerKey) === '') {
+            // A blank key is not "ask about nobody", it is a caller bug — and
+            // upstream would answer it with the unattributed union.
+            throw new InvalidArgumentException(
+                'A provider external key is required to ask which roles a user holds AT a provider.'
+            );
+        }
+
         if (array_key_exists($providerKey, $this->rolesCache)) {
             return $this->rolesCache[$providerKey];
         }
@@ -170,6 +185,33 @@ final class ExoClassIdentity
         }
 
         return array_values(array_unique($names));
+    }
+
+    /**
+     * An unresolved `provider_info` — every field null, which is what ExoClass
+     * emits when it scoped the answer to nobody — is NOT a provider. Returning
+     * null for it is the whole point: it is what lets a scoped lookup tell an
+     * answer about provider X from an answer about everybody.
+     */
+    private static function parseProviderInfo(mixed $provider): ?ProviderInfo
+    {
+        if (! is_array($provider)) {
+            return null;
+        }
+
+        $id = $provider['id'] ?? null;
+        $id = is_int($id) || (is_string($id) && $id !== '' && ctype_digit($id)) ? (int) $id : null;
+        $externalKey = self::asString($provider['external_key'] ?? null);
+
+        if ($id === null && $externalKey === null) {
+            return null;
+        }
+
+        return new ProviderInfo(
+            id: $id,
+            externalKey: $externalKey,
+            name: self::asString($provider['name'] ?? null),
+        );
     }
 
     /**

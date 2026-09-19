@@ -43,6 +43,9 @@
             "ExoClass\\Sso\\Tests\\": "tests/"
         }
     },
+    "suggest": {
+        "phpunit/phpunit": "Required to use ExoClass\\Sso\\Testing\\ExoClassSsoFake, which asserts through PHPUnit."
+    },
     "scripts": {
         "test": "vendor/bin/pest",
         "lint": "vendor/bin/pint --test",

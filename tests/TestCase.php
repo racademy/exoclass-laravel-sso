@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace ExoClass\Sso\Tests;
 
+use ExoClass\Sso\Actions\GlobalLogout;
 use ExoClass\Sso\ExoClassSsoServiceProvider;
 use ExoClass\Sso\Http\Middleware\ExoClassSessionAuthenticate;
 use ExoClass\Sso\Session\SsoSession;
 use ExoClass\Sso\Tests\Support\ArrayUserProvider;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -73,6 +75,12 @@ abstract class TestCase extends Orchestra
             $router->get('/up', static fn (): string => 'healthy');
             $router->get('/livewire/update', static fn (): string => 'livewire');
             $router->post('/dashboard', static fn (): string => 'saved');
+            $router->get('/logout', static function (Request $request): string {
+                app(GlobalLogout::class)->handle($request);
+                Auth::logout();
+
+                return 'signed out';
+            });
         });
     }
 }

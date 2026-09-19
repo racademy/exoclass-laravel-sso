@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use ExoClass\Sso\Http\RequestClassifier;
 
 /*
 |--------------------------------------------------------------------------
@@ -116,5 +117,37 @@ return [
     | answers ChoiceRequired. NULL until the host app registers one.
     */
     'choice_route' => env('EXOCLASS_SSO_CHOICE_ROUTE'),
+
+    /*
+    | The domain the ExoClass session cookie lives on. Used ONLY to delete that
+    | cookie from the browser on a global logout: a `Cookie::forget` with the
+    | wrong domain silently deletes nothing, because the browser matches the
+    | deletion cookie against the domain the original was set on.
+    */
+    'cookie_domain' => env('EXOCLASS_SSO_COOKIE_DOMAIN', '.exoclass.com'),
+
+    /*
+    | Requests that may never cost an upstream call — assets, machine endpoints
+    | and Livewire round trips. Setting this REPLACES the defaults in
+    | RequestClassifier::DEFAULT_IGNORED_PATHS rather than adding to them, so an
+    | operator who narrows the list can see exactly what is exempt.
+    */
+    'ignore_paths' => RequestClassifier::DEFAULT_IGNORED_PATHS,
+
+    /*
+    | View rendered with HTTP 403 when the app's resolver denies a visitor who
+    | IS signed into ExoClass. Null falls back to the host app's own 403 page.
+    | The view receives `reason`, the resolver's operator-facing string — which
+    | is why it is short, stable and free of anything secret.
+    */
+    'denied_view' => env('EXOCLASS_SSO_DENIED_VIEW'),
+
+    /*
+    | Where to send a visitor whose SSO session was just torn down (ExoClass
+    | logged them out upstream). A route name or a URL; null redirects them back
+    | to the page they asked for, and lets the app's own auth middleware decide
+    | whether that page needs a login.
+    */
+    'local_login_route' => env('EXOCLASS_SSO_LOCAL_LOGIN_ROUTE'),
 
 ];

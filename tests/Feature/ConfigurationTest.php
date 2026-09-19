@@ -6,6 +6,7 @@ use ExoClass\Sso\Contracts\IdentityFetcher;
 use ExoClass\Sso\Contracts\IdentityResolver;
 use ExoClass\Sso\ExoClassSsoServiceProvider;
 use ExoClass\Sso\Http\ExoClassSessionClient;
+use ExoClass\Sso\Http\RequestClassifier;
 use ExoClass\Sso\Identity\UsersCurrentIdentityFetcher;
 
 /**
@@ -51,6 +52,10 @@ it('ships exactly the agreed key set, no more and no less', function () {
         'login_url',
         'login_redirect_param',
         'choice_route',
+        'cookie_domain',
+        'ignore_paths',
+        'denied_view',
+        'local_login_route',
     ]);
 });
 
@@ -69,7 +74,11 @@ it('ships dark, with the agreed defaults', function () {
         ->and($config['probe_retry_times'])->toBe(1)
         ->and($config['login_url'])->toBe('https://exoclass.com/lt/login')
         ->and($config['login_redirect_param'])->toBeNull()
-        ->and($config['choice_route'])->toBeNull();
+        ->and($config['choice_route'])->toBeNull()
+        ->and($config['cookie_domain'])->toBe('.exoclass.com')
+        ->and($config['ignore_paths'])->toBe(RequestClassifier::DEFAULT_IGNORED_PATHS)
+        ->and($config['denied_view'])->toBeNull()
+        ->and($config['local_login_route'])->toBeNull();
 });
 
 it('derives the stateful referer as the BARE origin of APP_URL', function (string $appUrl, string $expected) {

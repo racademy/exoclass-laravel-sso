@@ -1,0 +1,88 @@
+{
+    "_source": "synthetic",
+    "_note": "Hand-built from ~/Sites/exoclass app/DataMaps/Api/V1/UserApiMap.php, ProviderApiMap.php and RoleApiMap.php (UserController::currentUser, no X-Provider-Key header). Task 008 replaces this with a response recorded from ExoClass staging with a real session cookie. Shape rules it pins: the payload is BARE (no data envelope), roles[] is flat and carries NO provider attribution, employers[] lists every provider, and provider_info is absent because no provider was requested.",
+    "_endpoint": "GET /api/v1/lt/users/current",
+    "id": 48211,
+    "type": "employee",
+    "external_key": "a1b2c3d4-0000-4444-8888-99990000aaaa",
+    "provider_id": 1042,
+    "customer_status": null,
+    "first_name": "Mentorius",
+    "last_name": "Pavyzdys",
+    "email": "mentorius@robotikosakademija.lt",
+    "phone": "+37060000000",
+    "is_email_verified": true,
+    "logo": null,
+    "birthday": null,
+    "country": "LT",
+    "address": null,
+    "language": "lt",
+    "access_token": null,
+    "roles": [
+        {
+            "id": 3,
+            "name": "provider",
+            "permissions": [
+                {"id": 17, "name": "groups.manage"},
+                {"id": 24, "name": "employees.manage"}
+            ]
+        },
+        {
+            "id": 6,
+            "name": "teacher",
+            "permissions": [
+                {"id": 17, "name": "groups.manage"}
+            ]
+        }
+    ],
+    "employers": [
+        {
+            "id": 1042,
+            "external_key": "c0ffee00-1111-2222-3333-444455556666",
+            "phone": "+37052000000",
+            "website": "https://robotikosakademija.lt",
+            "address": "Vilnius",
+            "timezone_id": 41,
+            "is_am_pm": false,
+            "currency_code": "EUR",
+            "marketplace_id": null,
+            "email": "info@robotikosakademija.lt",
+            "type": "provider",
+            "name": "Robotikos akademija",
+            "short_name": "RA",
+            "tutorial_completed": true,
+            "social_links": [],
+            "language": "lt",
+            "legal_entity_name": "MB Robotikos akademija",
+            "legal_entity_personal_code": "300000000",
+            "legal_entity_address": "Vilnius",
+            "legal_entity_postal_code": "LT-01100",
+            "legal_entity_phone": "+37052000000",
+            "legal_entity_email": "info@robotikosakademija.lt"
+        },
+        {
+            "id": 2077,
+            "external_key": "decafbad-7777-8888-9999-aaaabbbbcccc",
+            "phone": "+37061111111",
+            "website": "https://brainclub.lt",
+            "address": "Kaunas",
+            "timezone_id": 41,
+            "is_am_pm": false,
+            "currency_code": "EUR",
+            "marketplace_id": null,
+            "email": "info@brainclub.lt",
+            "type": "provider",
+            "name": "Brain Club",
+            "short_name": "BC",
+            "tutorial_completed": true,
+            "social_links": [],
+            "language": "lt",
+            "legal_entity_name": "VsI Brain Club",
+            "legal_entity_personal_code": "300000001",
+            "legal_entity_address": "Kaunas",
+            "legal_entity_postal_code": "LT-44001",
+            "legal_entity_phone": "+37061111111",
+            "legal_entity_email": "info@brainclub.lt"
+        }
+    ]
+}

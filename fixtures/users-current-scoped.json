@@ -1,0 +1,73 @@
+{
+    "_source": "synthetic",
+    "_note": "Hand-built from ~/Sites/exoclass app/DataMaps/Api/V1/UserApiMap.php, ProviderApiMap.php and RoleApiMap.php (UserController::currentUser WITH X-Provider-Key: c0ffee00-1111-2222-3333-444455556666). Task 008 replaces this with a response recorded from ExoClass staging. Shape rules it pins: roles[] and employers[] are filtered to the requested provider, and provider_info is glued on at the top level by UserController::currentUser's success mapping.",
+    "_endpoint": "GET /api/v1/lt/users/current (X-Provider-Key: c0ffee00-1111-2222-3333-444455556666)",
+    "id": 48211,
+    "type": "employee",
+    "external_key": "a1b2c3d4-0000-4444-8888-99990000aaaa",
+    "provider_id": 1042,
+    "customer_status": null,
+    "first_name": "Mentorius",
+    "last_name": "Pavyzdys",
+    "email": "mentorius@robotikosakademija.lt",
+    "phone": "+37060000000",
+    "is_email_verified": true,
+    "logo": null,
+    "birthday": null,
+    "country": "LT",
+    "address": null,
+    "language": "lt",
+    "access_token": null,
+    "roles": [
+        {
+            "id": 3,
+            "name": "provider",
+            "permissions": [
+                {"id": 17, "name": "groups.manage"},
+                {"id": 24, "name": "employees.manage"}
+            ]
+        }
+    ],
+    "employers": [
+        {
+            "id": 1042,
+            "external_key": "c0ffee00-1111-2222-3333-444455556666",
+            "phone": "+37052000000",
+            "website": "https://robotikosakademija.lt",
+            "address": "Vilnius",
+            "timezone_id": 41,
+            "is_am_pm": false,
+            "currency_code": "EUR",
+            "marketplace_id": null,
+            "email": "info@robotikosakademija.lt",
+            "type": "provider",
+            "name": "Robotikos akademija",
+            "short_name": "RA",
+            "tutorial_completed": true,
+            "social_links": [],
+            "language": "lt",
+            "legal_entity_name": "MB Robotikos akademija",
+            "legal_entity_personal_code": "300000000",
+            "legal_entity_address": "Vilnius",
+            "legal_entity_postal_code": "LT-01100",
+            "legal_entity_phone": "+37052000000",
+            "legal_entity_email": "info@robotikosakademija.lt"
+        }
+    ],
+    "employee_provider": {
+        "id": 99101,
+        "provider_id": 1042,
+        "user_id": 48211,
+        "is_active": true
+    },
+    "provider_info": {
+        "id": 1042,
+        "external_key": "c0ffee00-1111-2222-3333-444455556666",
+        "name": "Robotikos akademija",
+        "short_name": "RA",
+        "type": "provider",
+        "currency_code": "EUR",
+        "language": "lt",
+        "timezone_id": 41
+    }
+}

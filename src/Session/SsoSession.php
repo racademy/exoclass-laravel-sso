@@ -153,6 +153,14 @@ final class SsoSession
     }
 
     /**
+     * An attempt worked, so the record of the last one that did not is stale.
+     */
+    public static function forgetProbe(Session $session): void
+    {
+        $session->forget(self::PROBED_AT);
+    }
+
+    /**
      * A guest whose probe already failed inside the TTL is not asked about
      * again. This is what keeps a signed-out visitor browsing a public page
      * from turning every navigation into an upstream call.

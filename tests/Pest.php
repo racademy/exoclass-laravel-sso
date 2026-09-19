@@ -2,8 +2,15 @@
 
 declare(strict_types=1);
 
+use ExoClass\Sso\Contracts\IdentityResolver;
 use ExoClass\Sso\Http\SessionCredential;
+use ExoClass\Sso\Session\SsoSession;
+use ExoClass\Sso\Tests\Support\ArrayUserProvider;
+use ExoClass\Sso\Tests\Support\RecordingResolver;
 use ExoClass\Sso\Tests\TestCase;
+use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Carbon;
+use Pest\TestSuite;
 
 uses(TestCase::class)->in('Feature', 'Unit');
 
@@ -49,4 +56,66 @@ function captureLog(): string
     ]);
 
     return $path;
+}
+
+/**
+ * The running test case, typed — `test()` alone is a union PHPStan cannot call
+ * HTTP helpers on.
+ */
+function harness(): TestCase
+{
+    $harness = TestSuite::getInstance()->test;
+
+    assert($harness instanceof TestCase);
+
+    return $harness;
+}
+
+/**
+ * The app-side resolver, bound into the container and returned so a test can
+ * tell it what to answer.
+ */
+function ssoResolver(): RecordingResolver
+{
+    $resolver = app()->bound(RecordingResolver::class) ? app(RecordingResolver::class) : new RecordingResolver;
+
+    app()->instance(RecordingResolver::class, $resolver);
+    app()->instance(IdentityResolver::class, $resolver);
+
+    return $resolver;
+}
+
+/**
+ * A local account for the resolver to vouch for.
+ */
+function ssoUser(int $id = 7, string $email = 'mentorius@robotikosakademija.lt'): GenericUser
+{
+    return ArrayUserProvider::add($id, $email);
+}
+
+/**
+ * The session state an SSO login leaves behind, for tests that start from an
+ * already-authenticated visitor.
+ *
+ * @return array<string, mixed>
+ */
+function ssoSessionState(string $cookieValue = 'RAW-EXOCLASS-COOKIE-VALUE-7f3a', int $exoClassUserId = 48211, ?int $checkedAt = null): array
+{
+    return [
+        SsoSession::AUTHENTICATED => true,
+        SsoSession::FINGERPRINT => SsoSession::fingerprint($cookieValue),
+        SsoSession::EXOCLASS_USER_ID => $exoClassUserId,
+        SsoSession::CHECKED_AT => $checkedAt ?? Carbon::now()->getTimestamp(),
+    ];
+}
+
+/**
+ * The unscoped `users/current` body, with the ExoClass user id swapped so a
+ * test can stage an account switch.
+ *
+ * @return array<array-key, mixed>
+ */
+function identityPayload(int $exoClassUserId = 48211, string $email = 'mentorius@robotikosakademija.lt'): array
+{
+    return [...ssoFixture('users-current-unscoped'), 'id' => $exoClassUserId, 'email' => $email];
 }

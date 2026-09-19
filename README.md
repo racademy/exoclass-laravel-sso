@@ -52,6 +52,13 @@ The repository is private, so Composer needs the VCS entry:
 composer require racademy/exoclass-laravel-sso:^0.1
 ```
 
+Until `v0.1.0` is tagged there is no version to resolve, so the first consumers
+track the branch:
+
+```bash
+composer require racademy/exoclass-laravel-sso:dev-main
+```
+
 ### 2. Publish the config
 
 ```bash

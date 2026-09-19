@@ -8,12 +8,29 @@ use ExoClass\Sso\Exceptions\UnavailableException;
 use ExoClass\Sso\Http\ExoClassSessionClient;
 use ExoClass\Sso\Support\LogSanitizer;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use ReflectionMethod;
 
 function client(): ExoClassSessionClient
 {
     return app(ExoClassSessionClient::class);
+}
+
+/**
+ * The Guzzle options of the PendingRequest the client actually builds.
+ *
+ * @return array<string, mixed>
+ */
+function probeOptions(): array
+{
+    $request = (new ReflectionMethod(ExoClassSessionClient::class, 'request'))
+        ->invoke(client(), 'GET', credential(), null);
+
+    assert($request instanceof PendingRequest);
+
+    return $request->getOptions();
 }
 
 it('calls users/current on the configured api url and locale', function () {
@@ -106,16 +123,27 @@ it('spends the configured probe budget on transient failures only', function () 
     Http::assertSentCount(2);
 });
 
-it('bounds the probe with the configured timeout', function () {
-    config()->set('exoclass-sso.probe_timeout_ms', 1500);
-    Http::fake(['*' => Http::response(ssoFixture('users-current-unscoped'))]);
+it('keeps the probe budget in milliseconds instead of rounding it up to a second', function (int $ms, float $seconds) {
+    config()->set('exoclass-sso.probe_timeout_ms', $ms);
 
-    client()->currentUser(credential());
+    expect(client()->probeTimeoutSeconds())->toBe($seconds);
+})->with([
+    'the shipped default is 1.5 s, not 2 s' => [1500, 1.5],
+    'a tightened half-second stays half a second' => [500, 0.5],
+    'a whole second is still a whole second' => [3000, 3.0],
+    'an absurd 0 is floored, not turned into a second' => [0, 0.05],
+]);
 
-    Http::assertSent(fn (Request $request): bool => true);
+it('puts the configured timeout on the request that actually goes out', function (int $ms, float $seconds) {
+    config()->set('exoclass-sso.probe_timeout_ms', $ms);
 
-    expect(client()->probeTimeoutSeconds())->toBe(2);
-});
+    // Reaching into the private builder is the point: asserting on the helper
+    // alone let `->timeout(...)` be deleted with every test still green.
+    expect(probeOptions()['timeout'])->toBe($seconds);
+})->with([
+    'default' => [1500, 1.5],
+    'tightened' => [400, 0.4],
+]);
 
 it('logs out upstream with the paired XSRF token', function () {
     Http::fake(['*' => Http::response('', 204)]);

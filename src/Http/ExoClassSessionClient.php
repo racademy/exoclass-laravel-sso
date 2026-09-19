@@ -109,14 +109,20 @@ final class ExoClassSessionClient
     }
 
     /**
-     * The wall-clock ceiling of one probe, in whole seconds — `probe_timeout_ms`
-     * rounded up, because Laravel's HTTP timeout is second-grained.
+     * The wall-clock ceiling of one probe, in seconds — the configured
+     * millisecond budget exactly, NOT rounded up to the next second.
+     *
+     * `PendingRequest::timeout()` is declared `int|float` on both supported
+     * majors and hands the value straight to Guzzle, so the operator who caps a
+     * cold guest page at 1.5 s gets 1.5 s. The old whole-second rounding handed
+     * them 2 s, and turned a tightened 500 ms into 1 s — always the ceiling
+     * they did not configure.
      */
-    public function probeTimeoutSeconds(): int
+    public function probeTimeoutSeconds(): float
     {
         $ms = (int) $this->config->get('exoclass-sso.probe_timeout_ms', 1500);
 
-        return max(1, (int) ceil($ms / 1000));
+        return max(0.05, $ms / 1000);
     }
 
     /**

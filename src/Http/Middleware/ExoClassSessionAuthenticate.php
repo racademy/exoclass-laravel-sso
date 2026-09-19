@@ -355,6 +355,14 @@ final class ExoClassSessionAuthenticate
         );
 
         if ($resolution instanceof Authenticated) {
+            // A DIFFERENT HUMAN is taking over this browser, and `establish()`
+            // regenerates the session id but MIGRATES its contents — so without
+            // this the previous user's tenant selection, their passed
+            // password-confirmation gate and anything else the app kept would
+            // follow them in. Every other path that hands this session to
+            // somebody else calls `invalidate()`; this was the one that did not.
+            $session->flush();
+
             SsoSession::establish($request, $resolution->user, $credential, $identity);
 
             $this->logger->info('ExoClass SSO switched to the identity now signed into ExoClass.', [

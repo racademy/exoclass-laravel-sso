@@ -399,6 +399,33 @@ it('re-authenticates as the person who is signed into ExoClass now', function ()
     expect(Auth::id())->toBe(8);
 });
 
+it('does not hand the new person the session the last one left behind', function () {
+    // `regenerate()` MIGRATES session data: a new id, the same contents. On
+    // every other path that is what we want — here a DIFFERENT HUMAN is taking
+    // over the browser, and anything the app kept about the last one (a chosen
+    // tenant, a passed password-confirmation gate) would follow them in.
+    upstreamAnswers(exoClassUserId: 99001);
+    ssoUser(7);
+    $other = ssoUser(8, 'kita@robotikosakademija.lt');
+    ssoResolver()->answerWith(fn () => new Authenticated($other));
+
+    withCookie('SOMEBODY-ELSES-COOKIE')
+        ->actingAs(ssoUser(7))
+        ->withSession([
+            ...ssoSessionState(),
+            'filament.tenant' => 'org-of-user-7',
+            'auth.password_confirmed_at' => Carbon::now()->getTimestamp(),
+        ])
+        ->get('/dashboard')
+        ->assertOk()
+        ->assertSee('dashboard for 8');
+
+    expect(Auth::id())->toBe(8)
+        ->and(sessionAfterRequest()->get('filament.tenant'))->toBeNull()
+        ->and(sessionAfterRequest()->get('auth.password_confirmed_at'))->toBeNull()
+        ->and(SsoSession::exoClassUserId(sessionAfterRequest()))->toBe(99001);
+});
+
 it('drops the session when the new ExoClass identity may not be here', function () {
     upstreamAnswers(exoClassUserId: 99001);
     ssoResolver()->answerWith(fn () => new Denied('not a provider admin'));

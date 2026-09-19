@@ -11,7 +11,6 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
-use ReflectionMethod;
 
 function client(): ExoClassSessionClient
 {

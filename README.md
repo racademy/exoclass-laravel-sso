@@ -11,8 +11,9 @@ does the asking, and nothing else. It forwards the cookie to ExoClass, hands
 your app a verified identity, and lets your app decide what that identity is
 allowed to do locally.
 
-Status: **v0.1 core** — configuration, transport, identity and contracts.
-Middleware, global logout and the test kit land in the next task.
+Status: **v0.1.0** — configuration, transport, identity, contracts, middleware,
+global logout, the choice flow and the test kit. ExoSend is the first consumer;
+ExoSign and RA Portal follow.
 
 ## What it does and does not do
 
@@ -23,11 +24,18 @@ Middleware, global logout and the test kit land in the next task.
 | Parses the answer into `ExoClassIdentity` | Creates or refuses local users |
 | Fetches the user's role at a given provider | Owns roles, tenancy, and the picker page |
 | Keeps the cookie out of every log line | Registers the middleware and the cookie exemption |
+| Decides when to ask, and when not to | Renders the picker and the refusal page |
+| Ends the ExoClass session on logout | Performs its own local sign-out |
 
 The package never touches your user table, your roles or your tenancy. It has no
 migrations and no Filament, Livewire or Eloquent dependency.
 
-## Install
+## Integrating a new subsystem
+
+Ten steps. Steps 4 and 5 are the two that fail silently if you skip them, and
+step 10 is the one that keeps a broken integration off production.
+
+### 1. Install
 
 The repository is private, so Composer needs the VCS entry:
 
@@ -41,8 +49,212 @@ The repository is private, so Composer needs the VCS entry:
 
 ```bash
 composer require racademy/exoclass-laravel-sso:^0.1
+```
+
+### 2. Publish the config
+
+```bash
 php artisan vendor:publish --tag=exoclass-sso-config
 ```
+
+### 3. Set the environment
+
+Every key is `EXOCLASS_SSO_*`, and **`ENABLED` stays `false`** until step 10
+passes. The cookie names differ per ExoClass environment — this is the row that
+makes a copied `.env` work in production and quietly do nothing on staging.
+
+| Variable | production | staging | local |
+| --- | --- | --- | --- |
+| `EXOCLASS_SSO_ENABLED` | `false` → `true` after the gate | same | `false` |
+| `EXOCLASS_SSO_API_URL` | `https://api.exoclass.com/api/v1` | the staging API host, from ExoClass ops | your local ExoClass |
+| `EXOCLASS_SSO_SESSION_COOKIE_NAME` | `exoclass_session` | `sta_exoclass_session` | `local_exoclass_session` |
+| `EXOCLASS_SSO_XSRF_COOKIE_NAME` | `EXO-XSRF-TOKEN` | `STA-XSRF-TOKEN` | `LOCAL-XSRF-TOKEN` |
+| `EXOCLASS_SSO_STATEFUL_REFERER` | `https://send.exoclass.com` | your staging host | your local host |
+| `EXOCLASS_SSO_COOKIE_DOMAIN` | `.exoclass.com` | `.exoclass.com` | your shared local domain |
+| `EXOCLASS_SSO_CHOICE_ROUTE` | your picker route name | same | same |
+
+### 4. Exempt the cookies from encryption
+
+**Without this nothing works and nothing says why.** `EncryptCookies` tries to
+decrypt every cookie; the ExoClass ones were signed with ExoClass's key, so
+decryption fails, and Laravel's answer to a cookie it cannot decrypt is to
+replace it with `null`. No exception, no log line — `$request->cookie(...)`
+simply returns null forever.
+
+```php
+// bootstrap/app.php
+use ExoClass\Sso\Support\CookieExemptions;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->encryptCookies(except: CookieExemptions::names());
+})
+```
+
+Do not add the package's own `exoclass_sso_suppressed` cookie to that list:
+Laravel signs and reads it, and exempting it would let a visitor forge one.
+
+### 5. Register the middleware, in the right place
+
+It must run **after** the session has started and cookies have been decrypted,
+and **before** your auth guard redirects a guest. Put it in the group, not in
+the auth chain — the login page itself has to be able to sign somebody in.
+
+```php
+// A Filament panel: ->middleware(), NOT ->authMiddleware().
+// authMiddleware only runs on already-authenticated requests, so SSO would
+// never fire for the guest it exists to sign in.
+$panel
+    ->middleware([
+        EncryptCookies::class,
+        AddQueuedCookiesToResponse::class,
+        StartSession::class,
+        AuthenticateSession::class,
+        ShareErrorsFromSession::class,
+        VerifyCsrfToken::class,
+        SubstituteBindings::class,
+        DisableBladeIconComponents::class,
+        DispatchServingFilamentEvent::class,
+        'exoclass-sso',
+    ])
+```
+
+```php
+// A plain Laravel app: append it to the web group.
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->appendToGroup('web', ExoClassSessionAuthenticate::class);
+})
+```
+
+Never register it on `/api/*`. API clients carry tokens, not browser sessions,
+and the classifier skips them anyway — but a token route has no business
+depending on this.
+
+### 6. Implement `IdentityResolver` and bind it
+
+The package deliberately leaves this contract unbound, so an app that forgets
+it fails loudly rather than quietly resolving nobody.
+
+```php
+// AppServiceProvider::register()
+$this->app->bind(IdentityResolver::class, ExoSendIdentityResolver::class);
+```
+
+See [The contract](#the-contract) below for what it has to do.
+
+### 7. Add a choice route, if a visitor can map to more than one thing
+
+When the resolver answers `ChoiceRequired`, the middleware stashes the
+candidates and redirects to `exoclass-sso.choice_route`. The page renders them
+and posts the key back to `CompleteChoice`:
+
+```php
+Route::get('/choose-organization', function () {
+    return view('sso.choose', ['candidates' => SsoSession::candidates(session())]);
+})->name('sso.choose');
+
+Route::post('/choose-organization', function (Request $request, CompleteChoice $choice) {
+    $resolution = $choice->handle($request, (string) $request->input('key'));
+
+    if ($resolution instanceof Authenticated) {
+        return redirect()->to(SsoSession::pullIntendedUrl(session()) ?? '/admin');
+    }
+
+    return back()->withErrors(['key' => __('That organization is not available to you.')]);
+})->name('sso.choose.submit');
+```
+
+With no `choice_route` configured the middleware logs an error and falls
+through to the password form — a visitor who could have had a choice gets the
+login page instead of a redirect loop.
+
+### 8. Bind the logout
+
+A session established by SSO logs out **globally**; a password session logs out
+locally, exactly as before.
+
+```php
+final class LogoutController
+{
+    public function __invoke(Request $request, GlobalLogout $globalLogout): RedirectResponse
+    {
+        if (SsoSession::isSso($request->session())) {
+            $globalLogout->handle($request);
+        }
+
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
+    }
+}
+```
+
+`GlobalLogout` never throws and never blocks the local sign-out. In Filament,
+bind your controller over `Filament\Auth\Http\Controllers\LogoutController`, or
+bind a custom `LogoutResponse`.
+
+### 9. Write the three tests
+
+Every consumer owes these three, and the kit makes each of them short.
+
+```php
+use ExoClass\Sso\Testing\ExoClassSsoFake;
+
+it('signs an ExoClass provider admin straight in', function () {
+    $sso = ExoClassSsoFake::fake()->scoped($providerKey);
+    Organization::factory()->create(['exoclass_provider_id' => '1042']);
+
+    $sso->withExoClassCookie($this, 'any-value')->get('/admin')->assertOk();
+
+    $sso->assertProbed();
+    expect(auth()->user()->email)->toBe('mentorius@robotikosakademija.lt');
+});
+
+it('refuses an ExoClass user with no organization here, and keeps their ExoClass session', function () {
+    $sso = ExoClassSsoFake::fake();   // no organization seeded
+
+    $response = $sso->withExoClassCookie($this, 'any-value')->get('/admin')->assertForbidden();
+
+    expect($response->headers->getCookies())->not->toContain(/* the ExoClass cookie */);
+});
+
+it('ends the ExoClass session when a SSO user logs out', function () {
+    $sso = ExoClassSsoFake::fake()->logoutOk();
+
+    $sso->withExoClassCookie($this, 'any-value', 'an-xsrf-token')
+        ->actingAs($user)
+        ->withSession([SsoSession::AUTHENTICATED => true])
+        ->post('/logout');
+
+    $sso->assertLogoutForwardedWithXsrf('an-xsrf-token');
+});
+```
+
+Add a fourth if you can: one test **without** `withExoClassCookie` that sets the
+cookie by hand, proving your own `encryptCookies(except:)` is wired up. The
+helper applies the exemption for you, which is convenient and hides step 4.
+
+### 10. Probe live before flipping the flag
+
+ExoClass must list your bare host in `SANCTUM_STATEFUL_DOMAINS` **and**
+`CORS_ALLOWED_ORIGINS`, and be `config:cache`d, or every call comes back 401
+with a perfectly valid cookie. Prove it from the host itself, with a real
+browser cookie:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Cookie: sta_exoclass_session=<value from a browser>" \
+  -H "Referer: https://<this app's host>" \
+  -H "Origin: https://<this app's host>" \
+  -H "Accept: application/json" \
+  https://<exoclass staging api>/api/v1/lt/users/current
+```
+
+`200` → flip `EXOCLASS_SSO_ENABLED=true` on that environment.
+`401` → the host is not stateful upstream yet. Nothing in this package can fix
+that, and turning the flag on will not help.
+
 
 ## Configuration
 
@@ -67,6 +279,10 @@ from your host has come back 200.
 | `login_url` | `https://exoclass.com/lt/login` | Where the "Sign in with ExoClass" button goes. |
 | `login_redirect_param` | `null` | Set to `redirect` once the ExoClass UI honours a return URL. |
 | `choice_route` | `null` | Your app's picker route, used when a resolver answers `ChoiceRequired`. |
+| `cookie_domain` | `.exoclass.com` | The domain the shared cookie lives on, used to delete it on a global logout. A wrong domain deletes nothing. |
+| `ignore_paths` | the classifier's defaults | Paths that may never cost an upstream call. Setting it **replaces** the defaults. |
+| `denied_view` | `null` | View rendered with 403 when the resolver refuses. Null uses your app's own 403 page. |
+| `local_login_route` | `null` | Where to send a visitor whose SSO session was just torn down. Null sends them back to the page they asked for. |
 
 Two settings are worth dwelling on, because both have already cost a team a day:
 
@@ -174,6 +390,69 @@ names the provider that was asked about, and throws
 refused outright — dropping the header would silently ask the unscoped
 question. Asking unscoped must be an explicit `null`.
 
+## When the middleware asks, and what it does with the answer
+
+The whole policy is one table, and every row of it has a test.
+
+| Situation | What happens |
+| --- | --- |
+| flag off, or not a navigation | through, nothing asked |
+| guest, no ExoClass cookie | through, nothing asked |
+| guest, suppression cookie from a logout | through, nothing asked |
+| guest, a probe already failed this window | through, nothing asked |
+| guest, upstream 401 | mark the probe, through |
+| guest, upstream unreachable or unparseable | warn, through — the login page must render |
+| guest, resolver throws | log, through — never take the page down |
+| guest, `Authenticated` | sign in, continue where they were going |
+| guest, `ChoiceRequired` | stash candidates, redirect to the picker |
+| guest, `Denied` | 403, ExoClass cookie left intact, mark the probe |
+| signed in with a password | nothing, ever |
+| SSO session, cookie unchanged and fresh | nothing, no call |
+| SSO session, cookie changed | re-validate now |
+| SSO session, liveness window closed | re-validate |
+| re-validation: 401 or cookie gone | local sign-out, redirect |
+| re-validation: somebody else is signed into ExoClass | re-resolve: sign in as them, or sign out |
+| re-validation: upstream unreachable | keep the session, back off |
+
+**Only a request that will render a page may cost an upstream call.** One
+navigation drags dozens of asset, Livewire and XHR requests behind it, and a
+probe on each of them would turn every page view into dozens of `users/current`
+calls — for a signed-out visitor, forever, on a public page. `RequestClassifier`
+is that rule; `ignore_paths` is how you extend it.
+
+**Only a 401 is a verdict.** A timeout is not a logout. An ExoClass outage
+leaves the login page rendering and every established session intact.
+
+**An established session is re-validated on a hybrid trigger.** A changed cookie
+value is the fast signal — ExoClass rotates it on its own logout and on an
+account switch, so the change is caught on the next navigation. The
+`liveness_ttl` is the backstop for the opposite case: a server-side ExoClass
+logout while the visitor only browses here, so the browser is never handed a new
+cookie and the value never changes. Neither path ever tears a session down on a
+value difference alone — only an authoritative 401, a vanished cookie, or a
+different person upstream does that.
+
+**The session never holds the cookie.** Only a SHA-256 fingerprint of it, which
+answers "same cookie as last time?" and nothing else.
+
+## Logout
+
+A session established by SSO logs out globally (`GlobalLogout`); a password
+session logs out locally. The action ends the upstream session, then does three
+things that must happen even when that call fails:
+
+1. queue the suppression cookie, so the logout sticks;
+2. clear the SSO session keys;
+3. delete the shared cookie on its configured domain.
+
+The suppression cookie is the load-bearing step. Destroy the session and the
+browser still carries the `.exoclass.com` cookie — because the upstream logout
+soft-failed, or because the deletion has not reached the browser yet — and the
+very next request would sign the visitor straight back in. They click "log out"
+and stay logged in, with no way to tell why. It is a cookie rather than a
+session key precisely because logout invalidates the session.
+
+
 ## Failure modes
 
 Only one of them is a verdict:
@@ -186,6 +465,32 @@ Only one of them is a verdict:
 
 "We could not ask" is never "the session is dead". An ExoClass outage must not
 sign your users out.
+
+## Testing your integration
+
+`ExoClassSsoFake` installs an HTTP fake shaped like ExoClass and gives you the
+assertions worth making.
+
+| Call | Stages |
+| --- | --- |
+| `ExoClassSsoFake::fake()` | installs the fake, answering with the packaged unscoped fixture |
+| `->unscoped($payload)` | the identity body |
+| `->scoped($providerKey, $payload = null)` | the roles held at that provider |
+| `->unauthorized()` | 401 — the one authoritative answer |
+| `->unavailable($status = 503)` | an answer with nothing usable in it |
+| `->unreachable()` | a timeout or dropped connection |
+| `->malformed()` | a 200 the package cannot trust |
+| `->logoutOk()` / `->logoutFails()` | how `auth/logout` answers |
+| `->withExoClassCookie($this, $value, $xsrf = null)` | gives the next request the cookie, and applies the exemption |
+| `->assertProbed($times = 1)` | the identity was asked for exactly that often |
+| `->assertNotProbed()` | nothing was asked at all |
+| `->assertLogoutForwardedWithXsrf($xsrf = null)` | the logout carried the token ExoClass's CSRF gate demands |
+| `->assertNothingLeaked($logPath)` | no credential it handed out reached the log |
+
+A provider key the fake does not know answers with the **unscoped** body,
+because that is what ExoClass does with a key it cannot resolve. A stricter fake
+would let your tests pass while production granted access nobody granted.
+
 
 ## Secrets
 

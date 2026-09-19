@@ -16,6 +16,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use LogicException;
 use Throwable;
 
@@ -59,12 +60,23 @@ final class ExoClassSessionClient
      *
      * @return array<array-key, mixed>
      *
+     * @throws InvalidArgumentException a provider key that is present but blank
      * @throws UnauthorizedException 401 — authoritative "no valid session"
      * @throws UnavailableException transport failure, timeout, 5xx, or any other status
      * @throws MalformedResponseException 2xx whose body is not a JSON object
      */
     public function currentUser(SessionCredential $credential, ?string $providerKey = null, ?string $locale = null): array
     {
+        if ($providerKey !== null && trim($providerKey) === '') {
+            // Dropping the header here would turn a scoped question into an
+            // unscoped one and hand the caller the union of the user's roles
+            // across every provider as though they were held at this one.
+            // Asking about nobody must be an explicit null, never an accident.
+            throw new InvalidArgumentException(
+                'A blank X-Provider-Key would make ExoClass answer unscoped. Pass null to ask unscoped on purpose.'
+            );
+        }
+
         $path = $this->localePath($locale).'users/current';
 
         $response = $this->dispatch('GET', $path, $credential, $providerKey);
@@ -210,7 +222,7 @@ final class ExoClassSessionClient
             'Origin' => $referer,
         ];
 
-        if ($providerKey !== null && trim($providerKey) !== '') {
+        if ($providerKey !== null) {
             $headers['X-Provider-Key'] = $providerKey;
         }
 

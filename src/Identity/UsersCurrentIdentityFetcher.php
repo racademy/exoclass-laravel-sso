@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ExoClass\Sso\Identity;
 
 use ExoClass\Sso\Contracts\IdentityFetcher;
+use ExoClass\Sso\Exceptions\MalformedResponseException;
 use ExoClass\Sso\Exceptions\UnauthorizedException;
 use ExoClass\Sso\Exceptions\UnavailableException;
 use ExoClass\Sso\Http\ExoClassSessionClient;
@@ -21,6 +22,17 @@ use ExoClass\Sso\Http\SessionCredential;
  * candidate therefore pays two round trips; one that checks five pays six, and
  * a future dedicated `auth/identity` endpoint would collapse all of it to one
  * without changing a single caller.
+ *
+ * AND THE SCOPED ANSWER IS CHECKED, not assumed. ExoClass does not reject an
+ * `X-Provider-Key` it cannot resolve — `UserController::currentUser` discards
+ * the result of `resolveIdFromExternalKey()` and falls through to the
+ * unfiltered branch, answering 200 with every employer and the union of the
+ * user's roles across all of them. A stale key, a re-keyed provider, a staging
+ * key sent at a prod `api_url` or a numeric id passed where the uuid belongs
+ * would therefore each turn `hasRoleAt()` into a yes for a provider the user
+ * has no relationship with. So the roles are believed only when the answer's
+ * own `provider_info` names the provider that was asked about; anything else
+ * is a {@see MalformedResponseException}. This primitive fails CLOSED.
  */
 final readonly class UsersCurrentIdentityFetcher implements IdentityFetcher
 {
@@ -29,6 +41,7 @@ final readonly class UsersCurrentIdentityFetcher implements IdentityFetcher
     /**
      * @throws UnauthorizedException
      * @throws UnavailableException
+     * @throws MalformedResponseException
      */
     public function fetch(SessionCredential $credential): ExoClassIdentity
     {
@@ -38,13 +51,20 @@ final readonly class UsersCurrentIdentityFetcher implements IdentityFetcher
             $payload,
             /**
              * @return list<string>
+             *
+             * @throws MalformedResponseException when ExoClass did not scope its answer to $providerKey
              */
             function (string $providerKey) use ($credential): array {
-                $scoped = $this->client->currentUser($credential, $providerKey);
-                $body = is_array($scoped['data'] ?? null) ? $scoped['data'] : $scoped;
-                $user = is_array($body['user'] ?? null) ? $body['user'] : $body;
+                $scoped = ExoClassIdentity::fromArray($this->client->currentUser($credential, $providerKey));
 
-                return ExoClassIdentity::parseRoleNames($user['roles'] ?? $body['roles'] ?? null);
+                if ($scoped->providerInfo?->matches($providerKey) !== true) {
+                    throw MalformedResponseException::notScopedToProvider(
+                        $providerKey,
+                        $scoped->providerInfo?->externalKey,
+                    );
+                }
+
+                return $scoped->roles;
             },
         );
     }

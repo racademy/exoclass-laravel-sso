@@ -62,7 +62,7 @@ from your host has come back 200.
 | `probe_ttl` | `120` | Seconds a failed guest probe is remembered, so a signed-out visitor cannot make every page view hit ExoClass. |
 | `liveness_ttl` | `600` | Seconds between re-validations of an SSO session whose cookie value has not changed. |
 | `suppress_minutes` | `5` | Minutes a global logout suppresses auto re-SSO. |
-| `probe_timeout_ms` | `1500` | Hard ceiling on the interactive probe. |
+| `probe_timeout_ms` | `1500` | Hard ceiling on the interactive probe, honoured to the millisecond (not rounded up to a second). |
 | `probe_retry_times` | `1` | Attempts, not re-tries. A 401 is never retried. |
 | `login_url` | `https://exoclass.com/lt/login` | Where the "Sign in with ExoClass" button goes. |
 | `login_redirect_param` | `null` | Set to `redirect` once the ExoClass UI honours a return URL. |
@@ -156,7 +156,23 @@ $identity->user->email;                                  // who
 $identity->employers;                                    // where they work
 $identity->rolesFor('c0ffee00-…');                       // what they are, there
 $identity->hasRoleAt('c0ffee00-…', 'provider', 'administrator');
+$identity->providerInfo;                                 // who the answer was about, or null
 ```
+
+**The scoped answer is verified, not assumed.** ExoClass does not reject an
+`X-Provider-Key` it cannot resolve: `UserController::currentUser` throws away
+the result of `resolveIdFromExternalKey()` and falls through to the unfiltered
+branch, answering **200 with every employer and the union of the user's roles
+across all of them**. A stale key, a re-keyed or deleted provider, a staging key
+sent at a production `api_url`, or a numeric employer id passed where the uuid
+belongs would each turn `hasRoleAt()` into a *yes* for a provider the user has
+no relationship with.
+
+So `rolesFor()` believes a role list only when the answer's own `provider_info`
+names the provider that was asked about, and throws
+`MalformedResponseException` otherwise. Likewise a blank provider key is
+refused outright — dropping the header would silently ask the unscoped
+question. Asking unscoped must be an explicit `null`.
 
 ## Failure modes
 
@@ -188,6 +204,12 @@ pin the two answer shapes, and the contract tests parse them. Both are currently
 marked `"_source": "synthetic"` — hand-built from ExoClass's own
 `UserApiMap` / `ProviderApiMap` / `RoleApiMap`. They are replaced by responses
 recorded from ExoClass staging with a real session before the live gate.
+
+The unscoped fixture deliberately carries a `provider_info` block filled with
+nulls, because that is what upstream emits when it scoped the answer to nobody
+— and an unresolvable `X-Provider-Key` produces exactly that body. It is the
+only thing distinguishing it from a genuinely scoped answer, which is why the
+package refuses it.
 
 ## Development
 

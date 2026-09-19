@@ -69,6 +69,20 @@ it('scopes the call with X-Provider-Key when a provider key is given', function 
     Http::assertSent(fn (Request $request): bool => $request->header('X-Provider-Key') === ['c0ffee00-1111-2222-3333-444455556666']);
 });
 
+it('refuses a blank provider key rather than quietly sending an unscoped probe', function (string $key) {
+    Http::fake(['*' => Http::response(ssoFixture('users-current-unscoped'))]);
+
+    expect(fn () => client()->currentUser(credential(), $key))
+        ->toThrow(InvalidArgumentException::class);
+
+    // Nothing went out: a scoped question the client cannot ask must not
+    // become an unscoped one it can.
+    Http::assertNothingSent();
+})->with([
+    'empty' => [''],
+    'whitespace' => ['   '],
+]);
+
 it('accepts a per-call locale override', function () {
     Http::fake(['*' => Http::response(ssoFixture('users-current-unscoped'))]);
 
